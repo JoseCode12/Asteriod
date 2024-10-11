@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monkey Avoidance Game</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+    <style>
+      body {
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #000000;
+    color: #00FF00;
+    font-family: 'Press Start 2P', cursive;
+}
+
+canvas {
+    background: url('https://www.transparenttextures.com/patterns/stardust.png');
+    border: 2px solid #00FF00;
+}
+
+.message, .banana-counter {
+    position: absolute;
+    font-size: 24px;
+    color: #00FF00;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 10px;
+    border: 2px solid #00FF00;
+    border-radius: 5px;
+    text-shadow: 0 0 5px #00FF00;
+}
+
+.message {
+    bottom: 60px; /* Ajustado para evitar superposición con otros elementos */
+    left: 20px;
+    display: none;
+}
+
+.banana-counter {
+    position: absolute;
+    font-size: 20px;
+    color: #00FF00;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 10px;
+    border: 2px solid #00FF00;
+    border-radius: 5px;
+}
+
+/* Nivel: parte superior izquierda */
+#levelCounter {
+    top: 20px;
+    left: 20px;
+}
+
+/* Tiempo restante: parte superior derecha */
+#timeCounter {
+    top: 50px; /* Ajustado para evitar superposición */
+    right: 20px;
+    max-width: 200px; /* Limitar el ancho máximo */
+    text-align: center; /* Centrar el texto */
+    font-size: 20px; /* Asegúrate de que el tamaño del texto sea consistente */
+}
+
+/* Banner de instrucciones */
+#instructionBanner {
+    position: absolute;
+    bottom: 100px; /* Ajustado para evitar superposición */
+    left: 10px;
+    width: 200px; /* Establece un ancho máximo para el banner */
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 10px;
+    border-radius: 5px;
+    color: #39ff14; /* Verde neón */
+    font-size: 18px;
+    font-family: 'Press Start 2P', cursive; /* Usa la fuente 'Press Start 2P' */
+    text-shadow: 0 0 5px #39ff14; /* Sombra suave */
+    border: 2px solid #39ff14; /* Borde verde neón */
+    overflow: hidden; /* Oculta el desbordamiento */
+    white-space: normal; /* Permite el ajuste de línea */
+}
+
+
+/* Bananas eliminadas: parte inferior derecha */
+#bananaCounter {
+    bottom: 60px; /* Ajustado para evitar superposición con el botón de reinicio */
+    right: 20px;
+}
+
+/* Botón de reinicio */
+#restartButton {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    font-size: 24px;
+    color: #00FF00;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 10px;
+    border: 2px solid #00FF00;
+    border-radius: 5px;
+    text-shadow: 0 0 5px #00FF00;
+    display: none;
+}
+
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="message" class="message"></div>
+    <div id="bananaCounter" class="banana-counter">Metiroritos destruidos: 0</div>
+    <div id="levelCounter" class="banana-counter" style="top: 50px; left: 20px;">Nivel: 1</div>
+    <div id="timeCounter" class="banana-counter" style="top: 120px; left: 20px;">Tiempo restante: 5</div>
+    <div id="instructionBanner">Usa las flechas para moverte
+         y la letra "A" paea disparar</div>
+<!-- Agrega este enlace dentro de tu <head> -->
+    <link href="https://fonts.googleapis.com/css2?family=Monoton&display=swap" rel="stylesheet">
+
+    <button id="restartButton">Reiniciar Nivel</button>
+
+    <audio id="explosionSound" src="explosion.mp3"></audio>
+    <audio id="backgroundMusic" src="AdhesiveWombat - Night Shade ♫ NO COPYRIGHT 8-bit Music.mp3" loop></audio>
+    <audio id="shootSound" src="disparo.mp3"></audio>
+
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const messageDiv = document.getElementById('message');
+        const bananaCounterDiv = document.getElementById('bananaCounter');
+        const restartButton = document.getElementById('restartButton');
+        const explosionSound = document.getElementById('explosionSound');
+        const backgroundMusic = document.getElementById('backgroundMusic');
+
+        canvas.width = 800;
+        canvas.height = 600;
+
+        let monkey = {
+            x: canvas.width / 2 - 25,
+            y: canvas.height - 80,
+            width: 50,
+            height: 50,
+            speed: 4,
+            dx: 0,
+            dy: 0
+        };
+
+        let bananas = [];
+        let projectiles = [];
+        let bananaSpeed = 1.5;
+        let bananasEliminated = 0;
+        let bananaDropInterval = 2000;
+        let gameOver = false;
+        let lastDropTime;
+        let level = 1;
+let levelTime = 5;  // Tiempo del nivel 1 en segundos
+let levelEndTime = Date.now() + levelTime * 1000;  // Momento en que el nivel termina
+let timeRemaining = levelTime;  // Tiempo restante en segundos
+let ballImage = new Image();
+
+        function playSound(soundId) {
+            const sound = document.getElementById(soundId);
+            sound.currentTime = 0;
+            sound.play();
+        }
+
+        function keyDown(e) {
+            if (e.key === 'ArrowRight') monkey.dx = monkey.speed;
+            else if (e.key === 'ArrowLeft') monkey.dx = -monkey.speed;
+            else if (e.key === 'ArrowUp') monkey.dy = -monkey.speed;
+            else if (e.key === 'ArrowDown') monkey.dy = monkey.speed;
+            else if (e.key === 'a' || e.key === 'A') shootProjectile();
+        }
+       
+        
+    function updateCounters() {
+    // Calcular el tiempo restante
+    let currentTime = Date.now();
+    timeRemaining = Math.max(0, Math.ceil((levelEndTime - currentTime) / 1000));
+    
+    // Actualizar el contador de tiempo en pantalla
+    const timeCounterDiv = document.getElementById('timeCounter');
+    timeCounterDiv.textContent = `Tiempo restante: ${timeRemaining}`;
+
+    // Si el tiempo ha llegado a 0, avanzar de nivel
+    if (timeRemaining === 0) {
+        level++;
+        const levelCounterDiv = document.getElementById('levelCounter');
+        levelCounterDiv.textContent = `Nivel: ${level}`;
+
+        // Aumentar la dificultad: bajar el tiempo entre las bananas
+        if (level >= 4) {
+            // Aumentar la producción de bananas en un 30% o 40%
+            const incrementFactor = 0.3; // Cambia a 0.4 para un incremento del 40%
+            bananaDropInterval = Math.max(500, bananaDropInterval - (bananaDropInterval * incrementFactor));
+        } else {
+            bananaDropInterval -= 200;  // Disminuye el intervalo entre las bananas
+        }
+
+        if (bananaDropInterval < 500) bananaDropInterval = 500;  // Límite mínimo
+
+        // Calcular el nuevo tiempo del nivel
+        levelTime = level * 5;  // Aumenta 5 segundos por nivel
+        levelEndTime = Date.now() + levelTime * 1000; // Reinicia el temporizador para el nuevo nivel
+    }
+}
+
+
+
+
+
+
+
+        function keyUp(e) {
+            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') monkey.dx = 0;
+            else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') monkey.dy = 0;
+        }
+
+        function updateMonkeyPosition() {
+            monkey.x += monkey.dx;
+            monkey.y += monkey.dy;
+
+            if (monkey.x < 0) monkey.x = 0;
+            if (monkey.x + monkey.width > canvas.width) monkey.x = canvas.width - monkey.width;
+            if (monkey.y < 0) monkey.y = 0;
+            if (monkey.y + monkey.height > canvas.height) monkey.y = canvas.height - monkey.height;
+        }
+
+        function drawMonkey() {
+            const img = new Image();
+            img.src = 'Nave.png';
+            ctx.drawImage(img, monkey.x, monkey.y, monkey.width, monkey.height);
+        }
+
+        function getRandomColor() {
+            const r = Math.floor(Math.random() * 256);
+            const g = Math.floor(Math.random() * 256);
+            const b = Math.floor(Math.random() * 256);
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+
+        function createBanana() {
+            let x = Math.random() * (canvas.width - 20);
+            let y = -20;
+            let angle = Math.random() * 2 * Math.PI;
+            let speed = bananaSpeed + Math.random() * 0.5;
+            bananas.push({
+                x,
+                y,
+                width: 20,
+                height: 20,
+                dx: Math.cos(angle) * speed,
+                dy: Math.sin(angle) * speed,
+                color: getRandomColor()
+            });
+        }
+
+        function drawBananas() {
+            bananas.forEach(banana => {
+                ctx.fillStyle = banana.color;
+                ctx.beginPath();
+                ctx.arc(banana.x + banana.width / 2, banana.y + banana.height / 2, banana.width / 2, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+        }
+
+        function moveBananas() {
+            bananas.forEach(banana => {
+                banana.x += banana.dx;
+                banana.y += banana.dy;
+                if (banana.y > canvas.height + 20) {
+                    banana.x = Math.random() * (canvas.width - 20);
+                    banana.y = -20;
+                    banana.color = getRandomColor();
+                }
+            });
+        }
+
+        function shootProjectile() {
+    const projectile = {
+        x: monkey.x + monkey.width / 2,
+        y: monkey.y,
+        width: 5,
+        height: 10,
+        dy: -7
+    };
+    projectiles.push(projectile);
+
+    // Reproducir sonido de disparo
+    const shootSound = document.getElementById('shootSound');
+    shootSound.currentTime = 0;  // Reinicia el sonido para evitar retrasos si se dispara rápidamente
+    shootSound.play();
+}
+
+
+        function drawProjectiles() {
+            projectiles.forEach(projectile => {
+                ctx.fillStyle = '#FF0000';
+                ctx.fillRect(projectile.x, projectile.y, projectile.width, projectile.height);
+            });
+        }
+
+        function moveProjectiles() {
+            projectiles.forEach(projectile => {
+                projectile.y += projectile.dy;
+                if (projectile.y < -projectile.height) {
+                    projectiles.shift();
+                }
+            });
+        }
+        function updateBananaGeneration() {
+    if (Date.now() - lastDropTime > bananaDropInterval) {
+        createBanana();  // Genera una banana normal
+        lastDropTime = Date.now();
+
+        // A partir del nivel 4, genera un 20% más de bananas
+        if (level >= 4) {
+            createBanana(); // Genera una banana adicional
+        }
+    }
+}
+
+      
+            function checkProjectileCollision() {
+    bananas.forEach((banana, bIndex) => {
+        projectiles.forEach((projectile, pIndex) => {
+            const distance = Math.sqrt(
+                (projectile.x - banana.x) ** 2 +
+                (projectile.y - banana.y) ** 2
+            );
+            if (distance < banana.width / 2) {
+                bananas.splice(bIndex, 1);
+                projectiles.splice(pIndex, 1);
+                bananasEliminated++; // Aumentar el contador de bananas eliminadas
+                bananaCounterDiv.textContent = `Metioritos destruidos: ${bananasEliminated}`; // Actualizar el contador en pantalla
+                playSound('explosionSound');
+            }
+        });
+    });
+}
+
+        
+
+        function checkMonkeyCollision() {
+            bananas.forEach(banana => {
+                const distance = Math.sqrt(
+                    (monkey.x - banana.x) ** 2 +
+                    (monkey.y - banana.y) ** 2
+                );
+                if (distance < (monkey.width / 2 + banana.width / 2)) {
+                    endGame();
+                }
+            });
+        }
+
+        function updateBananaGeneration() {
+            if (Date.now() - lastDropTime > bananaDropInterval) {
+                createBanana();
+                lastDropTime = Date.now();
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawMonkey();
+            drawBananas();
+            drawProjectiles();
+        }
+
+        function endGame() {
+            gameOver = true;
+            messageDiv.textContent = '¡Juego terminado!';
+            messageDiv.style.display = 'block';
+            restartButton.style.display = 'block';
+            backgroundMusic.pause();
+        }
+
+        function update() {
+    if (gameOver) return;
+    
+    updateMonkeyPosition();
+    moveBananas();
+    moveProjectiles();
+    checkProjectileCollision();
+    checkMonkeyCollision();
+    updateBananaGeneration();
+    updateCounters();  // Actualizar los contadores de nivel y tiempo
+    draw();
+
+    requestAnimationFrame(update);
+}
+
+
+
+        function init() {
+    // Iniciar música de fondo tras la primera interacción del jugador
+    document.addEventListener('keydown', () => {
+        if (!backgroundMusic.playing) {
+            backgroundMusic.volume = 0.2;
+            backgroundMusic.play();
+        }
+    }, { once: true });
+
+    lastDropTime = Date.now();
+    document.addEventListener('keydown', keyDown);
+    document.addEventListener('keyup', keyUp);
+    restartButton.addEventListener('click', () => {
+        location.reload();
+    });
+    update();
+}
+
+
+        init();
+    </script>
+</body>
+</html>
